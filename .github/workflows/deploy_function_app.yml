@@ -65,5 +65,5 @@ jobs:
           app-name: 'tmt-be'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           publish-profile: ${{ secrets.APPSERVICE_PUBLISH_PROFILE }}
-          scm-do-build-during-deployment: true
+          scm-do-build-during-deployment: false
           enable-oryx-build: true

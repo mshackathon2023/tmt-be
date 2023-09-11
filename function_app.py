@@ -36,7 +36,7 @@ def CreateTopic(req: func.HttpRequest, rawDocuments: func.Out[func.Document], me
     message.set(json.dumps({"topic": guid}))
 
     return func.HttpResponse(
-        f"Created topic {guid}",
+        json.dumps({"topic": guid}),
         headers = {"Content-Type": "application/json"},
         status_code=202
     )

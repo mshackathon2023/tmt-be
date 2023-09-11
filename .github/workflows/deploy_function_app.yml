@@ -63,7 +63,6 @@ jobs:
         id: deploy-to-function
         with:
           app-name: 'tmt-be'
-          slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
           publish-profile: ${{ secrets.APPSERVICE_PUBLISH_PROFILE }}
           scm-do-build-during-deployment: true

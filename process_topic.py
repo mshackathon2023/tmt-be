@@ -1,29 +1,24 @@
 import logging
-import azure.functions as func
+from time import sleep
 import uuid
 import json
-
 import os 
 
-from azure.cosmos import CosmosClient, PartitionKey
+import azure.functions as func
+from azure.cosmos import CosmosClient
 
-from time import sleep
-from langchain.chat_models import ChatOpenAI, AzureChatOpenAI
-from langchain.document_loaders import WebBaseLoader
-from langchain.chains.summarize import load_summarize_chain
-
-
+from langchain.chat_models import AzureChatOpenAI
 from langchain import LLMChain, PromptTemplate
-from langchain.chains.mapreduce import MapReduceChain
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.chains import ReduceDocumentsChain, MapReduceDocumentsChain
 from langchain.chains.combine_documents.stuff import StuffDocumentsChain
-
 from langchain.schema.document import Document
+import tiktoken
+
+from prompt_utils import PROMPT_summarize_reduce_template, PROMPT_summarize_map_template, PROMPT_title_template
 
 ProcessTopic = func.Blueprint()
 
-import tiktoken
 def num_tokens_from_string(string: str, encoding_name: str) -> int:
     encoding = tiktoken.encoding_for_model(encoding_name)
     num_tokens = len(encoding.encode(string))
@@ -86,19 +81,11 @@ THE FIRST AMERICANS: THE OLMEC
 def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
     # Get Summary as map-reduce patttern from LangChain
     # Map
-    map_template = """The following is a set of documents
-    {docs}
-    Based on this list of docs, please identify the main themes 
-    Helpful Answer:"""
-    map_prompt = PromptTemplate.from_template(map_template)
+    map_prompt = PromptTemplate.from_template(PROMPT_summarize_map_template)
     map_chain = LLMChain(llm=llm, prompt=map_prompt)
 
     # Reduce
-    reduce_template = """You are a good high school teacher. The following is set of summaries:
-    {doc_summaries}
-    Take these and distill it into a final, consolidated summary of the main themes. 
-    Helpful Answer:"""
-    reduce_prompt = PromptTemplate.from_template(reduce_template)
+    reduce_prompt = PromptTemplate.from_template(PROMPT_summarize_reduce_template)
 
 
     # Run chain
@@ -135,28 +122,15 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
     )
     split_docs = text_splitter.split_documents([document])
 
-    # # go through the docs and see how many tokens each one has
-    # for chunk in split_docs:
-    #     logging.info(chunk.metadata["title"])
-    #     logging.info(num_tokens_from_string(chunk.page_content, "gpt-3.5-turbo"))
-
-    
-
     logging.info("-------- MAP REDUCE OUTPUT ----------")
     doc_summary = map_reduce_chain.run(split_docs)
     logging.info(doc_summary)
 
     logging.info("-------- GEN TITLE ------------------")
-    title_template = """Generate short title based on the text below. Short title consists of up to four words.
-
-    Text:
-    {docs}
-     
-    Helpful Title:"""
 
     llm_chain = LLMChain(
         llm=llm,
-        prompt=PromptTemplate.from_template(title_template)
+        prompt=PromptTemplate.from_template(PROMPT_title_template)
     )
     r = llm_chain(doc_summary)
     title = r["text"]
@@ -200,7 +174,6 @@ def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> d
                                 subscription_name="process_topic",
                             #    subscription_name="SERVICEBUS_SUBSCRIPTION_NAME"
                                )
-# def processtopic(message: func.ServiceBusMessage) -> func.HttpResponse:
 def processtopic(message: func.ServiceBusMessage):
     logging.info("-------- ServiceBus trigger function starterd --------")
     logging.getLogger("azure").setLevel(logging.ERROR)
@@ -226,22 +199,17 @@ def processtopic(message: func.ServiceBusMessage):
                       openai_api_key=os.getenv("OPENAI_API_KEY"), 
                       openai_api_version=os.getenv("OPENAI_API_VERSION") )
 
-  
     # get document from DB based on GUID
     document = get_document_from_db(topic_id)
-    
+ 
     doc_summary = None
 
     if document is None:
         logging.info("Document doesn't exist")
     else:
         (doc_summary, title, chunks) = summarize_document(llm, document)
-    
+
     if doc_summary is not None:
         update_document(topic_id, doc_summary, title, chunks)
-   
-
 
     logging.info("--------DONE----------")
-        
-        

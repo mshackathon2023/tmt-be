@@ -62,8 +62,7 @@ THE FIRST AMERICANS: THE OLMEC
     
     logging.info("-------- DOC READ INIT ---------- ")
     sleep(1)
-    logging.info("-------- DOC READ SLEEP END ---------- ")
-    logging.info(id)
+    logging.info(f"processing document: {id}")
     try:
         # test
         # id = "6480eb2d-0a05-43ab-b224-07c57480f88a"
@@ -75,15 +74,12 @@ THE FIRST AMERICANS: THE OLMEC
             item=id,
             partition_key=id
         )
-        logging.info("-------- DOC READ ---------- ")
-        logging.info(json.dumps(topic))
         document = topic["text"]
 
 
         langchain_document = Document(page_content=document, metadata={"title":"n/a"})
         return langchain_document
     except:
-        logging.info("-------- DOC READ ---------- ")
         logging.info("document not found: "+ id)
         return None
 
@@ -138,19 +134,19 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
         chunk_size=3000, chunk_overlap=200
     )
     split_docs = text_splitter.split_documents([document])
-    # go through the docs and see how many tokens each one has
-    for chunk in split_docs:
-        logging.info("---------------------------")
-        logging.info(chunk.metadata["title"])
-        logging.info(num_tokens_from_string(chunk.page_content, "gpt-3.5-turbo"))
+
+    # # go through the docs and see how many tokens each one has
+    # for chunk in split_docs:
+    #     logging.info(chunk.metadata["title"])
+    #     logging.info(num_tokens_from_string(chunk.page_content, "gpt-3.5-turbo"))
 
     
 
-    logging.info("----------------- MAP REDUCE OUTPUT ----------")
+    logging.info("-------- MAP REDUCE OUTPUT ----------")
     doc_summary = map_reduce_chain.run(split_docs)
     logging.info(doc_summary)
 
-    logging.info("----------------- GEN TITLE ------------------")
+    logging.info("-------- GEN TITLE ------------------")
     title_template = """Generate short title based on the text below. Short title consists of up to four words.
 
     Text:
@@ -164,14 +160,15 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
     )
     r = llm_chain(doc_summary)
     title = r["text"]
+    logging.info(title)
 
 
     return (doc_summary, title, split_docs)
 
-def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> bool:
+def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> dict[str, any]:
 
     logging.info("-------- DOC UPDATE INIT ---------- ")
-    logging.info(id)
+    # logging.info(id)
     try:
         # test
         # id = "6480eb2d-0a05-43ab-b224-07c57480f88a"
@@ -193,8 +190,7 @@ def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> b
         response = container.upsert_item(body=read_item)
     except:
         logging.info("-------- DOC UPDATE ERROR ---------- ")
-    logging.info("-------- DOC UPDATE END ---------- ")
-    return True
+    return response
 
 @ProcessTopic.function_name(name="processtopic")
 @ProcessTopic.service_bus_topic_trigger(arg_name="message", 
@@ -206,26 +202,21 @@ def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> b
                                )
 # def processtopic(message: func.ServiceBusMessage) -> func.HttpResponse:
 def processtopic(message: func.ServiceBusMessage):
-    logging.info('Python ServiceBus trigger function processed a request.')
+    logging.info("-------- ServiceBus trigger function starterd --------")
+    logging.getLogger("azure").setLevel(logging.ERROR)
     topic_id = None
     try:
         message_body = message.get_body().decode("utf-8")
-        logging.info("Message Body: " + message_body)
+        # logging.info("Message Body: " + message_body)
         message_body_json = json.loads(message_body)
-        logging.info("Message Body: " + json.dumps(message_body_json))
+        # logging.info("Message Body: " + json.dumps(message_body_json))
         topic_id = message_body_json["topic"]
-
-        logging.info("Python ServiceBus topic trigger processed message.")
-
     
     except ValueError:
         return func.HttpResponse(
              "Vaule Error",
              status_code=400
         )
-
-    # Generate a unique ID for the new document
-    guid = str(uuid.uuid4())
 
     # initialize LLM
     llm = AzureChatOpenAI(temperature=0, 

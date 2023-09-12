@@ -5,6 +5,8 @@ import json
 
 import os 
 
+from azure.cosmos import CosmosClient, PartitionKey
+
 from time import sleep
 from langchain.chat_models import ChatOpenAI, AzureChatOpenAI
 from langchain.document_loaders import WebBaseLoader
@@ -58,6 +60,22 @@ of the continent less favorable for settlement.
 THE FIRST AMERICANS: THE OLMEC
         """
 
+    logging.info("-------- DOC READ INIT ---------- ")
+    logging.info(id)
+
+    client = CosmosClient.from_connection_string(os.environ["COSMOSDB_CONNECTION_STRING"])
+    database = client.get_database_client("tmtdb")
+    container = database.get_container_client("rawDocuments")
+
+    topic = container.read_item(
+        item=id,
+        partition_key=id
+    )
+    logging.info("-------- DOC READ ---------- ")
+    logging.info(json.dumps(topic))
+    document = topic["text"]
+
+
     langchain_document = Document(page_content=document, metadata={"title":"n/a"})
     return langchain_document
 
@@ -72,11 +90,16 @@ THE FIRST AMERICANS: THE OLMEC
 # def processtopic(message: func.ServiceBusMessage) -> func.HttpResponse:
 def processtopic(message: func.ServiceBusMessage):
     logging.info('Python ServiceBus trigger function processed a request.')
-    message_body = None
+    topic_id = None
     try:
         message_body = message.get_body().decode("utf-8")
-        logging.info("Python ServiceBus topic trigger processed message.")
         logging.info("Message Body: " + message_body)
+        message_body_json = json.loads(message_body)
+        logging.info("Message Body: " + json.dumps(message_body_json))
+        topic_id = message_body_json["topic"]
+
+        logging.info("Python ServiceBus topic trigger processed message.")
+        # logging.info("Message Body: " + topic_id)
         # logging.info("OpenaAI:"+os.getenv("OPENAI_API_BASE"))
 
     
@@ -99,7 +122,7 @@ def processtopic(message: func.ServiceBusMessage):
 
   
     # get document from DB based on GUID
-    document = get_document_from_db(message_body)
+    document = get_document_from_db(topic_id)
     # logging.info("---------------------------")
     # logging.info(num_tokens_from_string(document, "gpt-3.5-turbo"))
 

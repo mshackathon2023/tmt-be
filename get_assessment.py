@@ -6,10 +6,10 @@ from azure.cosmos import CosmosClient, PartitionKey
 import azure.cosmos.exceptions as cosmos_exceptions
 import os
 
-GetTopic = func.Blueprint()
+GetAssessment = func.Blueprint()
 
-@GetTopic.route(route="gettopic/{topic}", methods=["GET"])
-def gettopic(req: func.HttpRequest) -> func.HttpResponse:
+@GetAssessment.route(route="getassessment/{topic}", methods=["GET"])
+def getassessment(req: func.HttpRequest) -> func.HttpResponse:
 
     topic_id = req.route_params.get("topic")
 
@@ -19,6 +19,7 @@ def gettopic(req: func.HttpRequest) -> func.HttpResponse:
     database = client.get_database_client("tmtdb")
     container = database.get_container_client("topics")
 
+   
     try:
         topic = container.read_item(
             item=topic_id,
@@ -30,9 +31,16 @@ def gettopic(req: func.HttpRequest) -> func.HttpResponse:
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
-
-    return func.HttpResponse(
-        json.dumps(topic),
-        headers = {"Content-Type": "application/json"},
-        status_code=200
-    )
+    
+    if topic["assessmentQuestions"] == None:
+        return func.HttpResponse(
+            f"Assessment for topic {topic_id} not available",
+            headers = {"Content-Type": "application/json"},
+            status_code=400
+        )
+    else:
+        return func.HttpResponse(
+            json.dumps(topic["assessmentQuestions"]),
+            headers = {"Content-Type": "application/json"},
+            status_code=200
+        )

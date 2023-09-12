@@ -87,7 +87,7 @@ THE FIRST AMERICANS: THE OLMEC
         logging.info("document not found: "+ id)
         return None
 
-def summarize_document(llm:AzureChatOpenAI, document:Document) -> str:
+def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
     # Get Summary as map-reduce patttern from LangChain
     # Map
     map_template = """The following is a set of documents
@@ -98,7 +98,7 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> str:
     map_chain = LLMChain(llm=llm, prompt=map_prompt)
 
     # Reduce
-    reduce_template = """The following is set of summaries:
+    reduce_template = """You are a good high school teacher. The following is set of summaries:
     {doc_summaries}
     Take these and distill it into a final, consolidated summary of the main themes. 
     Helpful Answer:"""
@@ -149,9 +149,26 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> str:
     logging.info("----------------- MAP REDUCE OUTPUT ----------")
     doc_summary = map_reduce_chain.run(split_docs)
     logging.info(doc_summary)
-    return doc_summary
 
-def update_document(id: str) -> bool:
+    logging.info("----------------- GEN TITLE ------------------")
+    title_template = """Generate short title based on the text below. Short title consists of up to four words.
+
+    Text:
+    {docs}
+     
+    Helpful Title:"""
+
+    llm_chain = LLMChain(
+        llm=llm,
+        prompt=PromptTemplate.from_template(title_template)
+    )
+    r = llm_chain(doc_summary)
+    title = r["text"]
+
+
+    return (doc_summary, title, split_docs)
+
+def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> bool:
 
     logging.info("-------- DOC UPDATE INIT ---------- ")
     logging.info(id)
@@ -165,6 +182,14 @@ def update_document(id: str) -> bool:
 
         read_item = container.read_item(item=id, partition_key=id)
         read_item['state'] = "assessing"
+        # read_item['state'] = "ready"
+        read_item['summary'] = summary
+        read_item['title'] = title
+        ch = []
+        for chunk in chunks:
+            guid = str(uuid.uuid4())
+            ch.append({guid:chunk.page_content})
+        read_item['chunks'] = ch
         response = container.upsert_item(body=read_item)
     except:
         logging.info("-------- DOC UPDATE ERROR ---------- ")
@@ -219,10 +244,10 @@ def processtopic(message: func.ServiceBusMessage):
     if document is None:
         logging.info("Document doesn't exist")
     else:
-        doc_summary = summarize_document(llm, document)
+        (doc_summary, title, chunks) = summarize_document(llm, document)
     
     if doc_summary is not None:
-        update_document(topic_id)
+        update_document(topic_id, doc_summary, title, chunks)
    
 
 

@@ -59,74 +59,35 @@ civilizations developed along the coast because the high Andes and the inhospita
 of the continent less favorable for settlement.
 THE FIRST AMERICANS: THE OLMEC
         """
-
-    logging.info("-------- DOC READ INIT ---------- ")
-    logging.info(id)
-
-    client = CosmosClient.from_connection_string(os.environ["COSMOSDB_CONNECTION_STRING"])
-    database = client.get_database_client("tmtdb")
-    container = database.get_container_client("rawDocuments")
-
-    topic = container.read_item(
-        item=id,
-        partition_key=id
-    )
-    logging.info("-------- DOC READ ---------- ")
-    logging.info(json.dumps(topic))
-    document = topic["text"]
-
-
-    langchain_document = Document(page_content=document, metadata={"title":"n/a"})
-    return langchain_document
-
-@ProcessTopic.function_name(name="processtopic")
-@ProcessTopic.service_bus_topic_trigger(arg_name="message", 
-                            #    topic_name="SERVICEBUS_TOPIC_NAME", 
-                               connection="SERVICEBUS_CONNECTION_STRING", 
-                                topic_name="newDocument",
-                                subscription_name="process_topic",
-                            #    subscription_name="SERVICEBUS_SUBSCRIPTION_NAME"
-                               )
-# def processtopic(message: func.ServiceBusMessage) -> func.HttpResponse:
-def processtopic(message: func.ServiceBusMessage):
-    logging.info('Python ServiceBus trigger function processed a request.')
-    topic_id = None
-    try:
-        message_body = message.get_body().decode("utf-8")
-        logging.info("Message Body: " + message_body)
-        message_body_json = json.loads(message_body)
-        logging.info("Message Body: " + json.dumps(message_body_json))
-        topic_id = message_body_json["topic"]
-
-        logging.info("Python ServiceBus topic trigger processed message.")
-        # logging.info("Message Body: " + topic_id)
-        # logging.info("OpenaAI:"+os.getenv("OPENAI_API_BASE"))
-
     
-    except ValueError:
-        return func.HttpResponse(
-             "Vaule Error",
-             status_code=400
+    logging.info("-------- DOC READ INIT ---------- ")
+    sleep(1)
+    logging.info("-------- DOC READ SLEEP END ---------- ")
+    logging.info(id)
+    try:
+        # test
+        # id = "6480eb2d-0a05-43ab-b224-07c57480f88a"
+        client = CosmosClient.from_connection_string(os.environ["COSMOSDB_CONNECTION_STRING"])
+        database = client.get_database_client("tmtdb")
+        container = database.get_container_client("rawdocs")
+
+        topic = container.read_item(
+            item=id,
+            partition_key=id
         )
-
-    # Generate a unique ID for the new document
-    guid = str(uuid.uuid4())
-
-    # initialize LLM
-    llm = AzureChatOpenAI(temperature=0, 
-                      model_name="gpt-35-turbo", 
-                      deployment_name="gpt-35-turbo", 
-                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
-                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
-                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
-
-  
-    # get document from DB based on GUID
-    document = get_document_from_db(topic_id)
-    # logging.info("---------------------------")
-    # logging.info(num_tokens_from_string(document, "gpt-3.5-turbo"))
+        logging.info("-------- DOC READ ---------- ")
+        logging.info(json.dumps(topic))
+        document = topic["text"]
 
 
+        langchain_document = Document(page_content=document, metadata={"title":"n/a"})
+        return langchain_document
+    except:
+        logging.info("-------- DOC READ ---------- ")
+        logging.info("document not found: "+ id)
+        return None
+
+def summarize_document(llm:AzureChatOpenAI, document:Document) -> str:
     # Get Summary as map-reduce patttern from LangChain
     # Map
     map_template = """The following is a set of documents
@@ -186,19 +147,85 @@ def processtopic(message: func.ServiceBusMessage):
     
 
     logging.info("----------------- MAP REDUCE OUTPUT ----------")
-    logging.info(map_reduce_chain.run(split_docs))
+    doc_summary = map_reduce_chain.run(split_docs)
+    logging.info(doc_summary)
+    return doc_summary
 
-    # # Store raw document in Cosmos DB
-    # rawDocuments.set(func.Document.from_dict({"id":guid, "text": text}))
+def update_document(id: str) -> bool:
 
-    # # Create new topic record in Cosmos DB
-    # topics.set(func.Document.from_dict({"id":guid, "state": "pending"}))
+    logging.info("-------- DOC UPDATE INIT ---------- ")
+    logging.info(id)
+    try:
+        # test
+        # id = "6480eb2d-0a05-43ab-b224-07c57480f88a"
+        client = CosmosClient.from_connection_string(os.environ["COSMOSDB_CONNECTION_STRING"])
+        database = client.get_database_client("tmtdb")
+        container = database.get_container_client("topics")
 
-    # # Send message to Service Bus
-    # message.set(json.dumps({"topic": guid}))
 
-    # return func.HttpResponse(
-    #     json.dumps({"topic": guid, "state":"assessing", "body": message_body}),
-    #     headers = {"Content-Type": "application/json"},
-    #     status_code=202
-    # )
+        read_item = container.read_item(item=id, partition_key=id)
+        read_item['state'] = "assessing"
+        response = container.upsert_item(body=read_item)
+    except:
+        logging.info("-------- DOC UPDATE ERROR ---------- ")
+    logging.info("-------- DOC UPDATE END ---------- ")
+    return True
+
+@ProcessTopic.function_name(name="processtopic")
+@ProcessTopic.service_bus_topic_trigger(arg_name="message", 
+                            #    topic_name="SERVICEBUS_TOPIC_NAME", 
+                               connection="SERVICEBUS_CONNECTION_STRING", 
+                                topic_name="newDocument",
+                                subscription_name="process_topic",
+                            #    subscription_name="SERVICEBUS_SUBSCRIPTION_NAME"
+                               )
+# def processtopic(message: func.ServiceBusMessage) -> func.HttpResponse:
+def processtopic(message: func.ServiceBusMessage):
+    logging.info('Python ServiceBus trigger function processed a request.')
+    topic_id = None
+    try:
+        message_body = message.get_body().decode("utf-8")
+        logging.info("Message Body: " + message_body)
+        message_body_json = json.loads(message_body)
+        logging.info("Message Body: " + json.dumps(message_body_json))
+        topic_id = message_body_json["topic"]
+
+        logging.info("Python ServiceBus topic trigger processed message.")
+
+    
+    except ValueError:
+        return func.HttpResponse(
+             "Vaule Error",
+             status_code=400
+        )
+
+    # Generate a unique ID for the new document
+    guid = str(uuid.uuid4())
+
+    # initialize LLM
+    llm = AzureChatOpenAI(temperature=0, 
+                      model_name="gpt-35-turbo", 
+                      deployment_name="gpt-35-turbo", 
+                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+
+  
+    # get document from DB based on GUID
+    document = get_document_from_db(topic_id)
+    
+    doc_summary = None
+
+    if document is None:
+        logging.info("Document doesn't exist")
+    else:
+        doc_summary = summarize_document(llm, document)
+    
+    if doc_summary is not None:
+        update_document(topic_id)
+   
+
+
+    logging.info("--------DONE----------")
+        
+        

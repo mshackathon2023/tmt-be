@@ -8,7 +8,7 @@ CreateTopic = func.Blueprint()
 @CreateTopic.route(route="createtopic", methods=["POST"])
 @CreateTopic.cosmos_db_output(arg_name="rawDocuments",
                       database_name="tmtdb",
-                      container_name="rawDocuments",
+                      container_name="rawdocs",
                       create_if_not_exists=True,
                       connection="COSMOSDB_CONNECTION_STRING")
 @CreateTopic.cosmos_db_output(arg_name="topics",

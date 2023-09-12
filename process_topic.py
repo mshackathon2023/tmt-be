@@ -70,7 +70,8 @@ THE FIRST AMERICANS: THE OLMEC
             partition_key=id
         )
         document = topic["text"]
-
+        tokens = num_tokens_from_string(document, "gpt-3.5-turbo")
+        logging.info(f'INFO: whole document has {tokens} tokens')
 
         langchain_document = Document(page_content=document, metadata={"title":"n/a"})
         return langchain_document
@@ -117,11 +118,24 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
         return_intermediate_steps=False,
     )
 
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=3000, chunk_overlap=200
-    )
-    split_docs = text_splitter.split_documents([document])
 
+    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
+        chunk_size=2000, 
+        chunk_overlap=200,
+        separator = "\n",
+    )
+    # logging.info(len(document.page_content))
+    # logging.info(document.page_content)
+    # split_docs = text_splitter.create_documents(document.page_content)
+    split_docs = text_splitter.split_documents([document])
+    # logging.info("-------- SPLITTING OUTPUT ------------------")
+    logging.info(f"INFO: document split in {len(split_docs)} chunks")
+    # for doc in split_docs:
+    #     # for key, value in doc.metadata.items():
+    #     #     print (key)
+    #     logging.info("Chunk:")
+    #     # logging.info(doc.metadata["title"])
+    #     logging.info(num_tokens_from_string(doc.page_content, "gpt-3.5-turbo"))
     logging.info("-------- MAP REDUCE OUTPUT ----------")
     doc_summary = map_reduce_chain.run(split_docs)
     logging.info(doc_summary)

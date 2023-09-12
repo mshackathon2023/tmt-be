@@ -20,8 +20,8 @@ CreateTopic = func.Blueprint()
                               connection="SERVICEBUS_CONNECTION_STRING",
                               topic_name="newDocument")
 def createtopic(req: func.HttpRequest, rawDocuments: func.Out[func.Document], topics: func.Out[func.Document], message: func.Out[str]) -> func.HttpResponse:
-    logging.info('Python HTTP trigger function processed a request.')
 
+    # Get text from JSON body
     try:
         req_body = req.get_json()
         text = req_body.get("text")

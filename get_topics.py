@@ -12,8 +12,8 @@ GetTopics = func.Blueprint()
                      connection="COSMOSDB_CONNECTION_STRING")
 def gettopics(req: func.HttpRequest, documents: func.DocumentList) -> func.HttpResponse:
     
+    # Go throw list of documents and convert to dict
     output = []
-
     for doc in documents:
         output.append(doc.to_dict())
     

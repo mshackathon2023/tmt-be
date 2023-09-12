@@ -6,7 +6,7 @@ import json
 from create_topic import CreateTopic
 from get_topics import GetTopics
 from get_topic import GetTopic
-# from process_topic import ProcessTopic
+from process_topic import ProcessTopic
 from get_assessment import GetAssessment
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
@@ -14,6 +14,6 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 app.register_functions(CreateTopic) 
 app.register_functions(GetTopics) 
 app.register_functions(GetTopic) 
-# app.register_functions(ProcessTopic)
+app.register_functions(ProcessTopic)
 app.register_functions(GetAssessment)
 

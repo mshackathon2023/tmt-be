@@ -4,3 +4,6 @@
 
 azure-functions
 azure-cosmos
+openai 
+tiktoken 
+langchain

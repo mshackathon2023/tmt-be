@@ -38,9 +38,22 @@ def getassessment(req: func.HttpRequest) -> func.HttpResponse:
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
-    else:
-        return func.HttpResponse(
-            json.dumps(topic["assessmentQuestions"]),
-            headers = {"Content-Type": "application/json"},
-            status_code=200
-        )
+    
+    assessmentQuestions = []
+    for question in topic["assessmentQuestions"]:
+        question_record = {}
+        question_record["q_id"] = question["q_id"]
+        question_record["text"] = question["text"]
+        question_record["answers"] = []
+        for answer in question["answers"]:
+            answer_record = {}
+            answer_record["a_id"] = answer["a_id"]
+            answer_record["text"] = answer["text"]
+            question_record["answers"].append(answer_record)
+        assessmentQuestions.append(question_record)
+
+    return func.HttpResponse(
+        json.dumps(assessmentQuestions),
+        headers = {"Content-Type": "application/json"},
+        status_code=200
+    )

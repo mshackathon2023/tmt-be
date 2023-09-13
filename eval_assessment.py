@@ -10,7 +10,10 @@ import os
 EvalAssessment = func.Blueprint()
 
 @EvalAssessment.route(route="evalassessment/{topic}", methods=["POST"])
-def evalassessment(req: func.HttpRequest) -> func.HttpResponse:
+@EvalAssessment.service_bus_topic_output(arg_name="message",
+                              connection="SERVICEBUS_CONNECTION_STRING",
+                              topic_name="assessedtopic")
+def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpResponse:
 
     # Get topic ID from route parameter
     topic_id = req.route_params.get("topic")
@@ -105,9 +108,16 @@ def evalassessment(req: func.HttpRequest) -> func.HttpResponse:
  
     # Replace original assessmentQuestions with edited version
     topic["assessmentQuestions"] = assessmentQuestions_edited
+    topic["state"] = "assessed"
+
+    # Replace topic in Cosmos DB
+    container.replace_item(topic_id, topic)
+
+    # Send message to Service Bus
+    message.set(json.dumps({"topic": topic_id}))
 
     return func.HttpResponse(
-        "OK",
+        "{}",
         headers = {"Content-Type": "application/json"},
         status_code=200
     )

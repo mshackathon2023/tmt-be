@@ -150,22 +150,24 @@ def generate_lesson(llm:AzureChatOpenAI, topic:dict) -> str:
             return res["text"]
     return "n/a"
 
-def generate_test_from_lesson(llm:AzureChatOpenAI, topic:dict) -> list[dict]:
+def generate_test_from_lesson(llm:AzureChatOpenAI, lesson_text:str) -> list[dict]:
     llm_chain = LLMChain(
         llm=llm,
         prompt=PromptTemplate.from_template(PROMPT_generate_assesment)
     )
     # random_chunks = random.sample(chunks, 5)
     
-    assessments = []
-    for chunk in topic["chunks"]:
-        # logging.info(chunk)
-        for guid,chunk_text in chunk.items():
-            r = llm_chain(chunk_text)
-            # logging.info("[{"+r["text"])
-            assessment = json.loads("[{"+r["text"])
-            assessments.extend(assessment)
-    return assessments
+    # assessments = []
+    # for chunk in topic["chunks"]:
+    #     # logging.info(chunk)
+    #     for guid,chunk_text in chunk.items():
+    #         r = llm_chain(chunk_text)
+    #         # logging.info("[{"+r["text"])
+    #         assessment = json.loads("[{"+r["text"])
+    #         assessments.extend(assessment)
+    r = llm_chain(lesson_text)
+    assessment = json.loads("[{"+r["text"])
+    return assessment
 
 def update_document(id: str, lessonText:str, lessonAssessment:dict) -> dict[str, any]:
 

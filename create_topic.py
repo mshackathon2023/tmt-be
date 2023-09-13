@@ -25,6 +25,7 @@ def createtopic(req: func.HttpRequest, rawDocuments: func.Out[func.Document], to
     try:
         req_body = req.get_json()
         text = req_body.get("text")
+        lesson_length = req_body.get("lessonLength")
     except ValueError:
         return func.HttpResponse(
              "JSON body with text is required.",
@@ -38,7 +39,7 @@ def createtopic(req: func.HttpRequest, rawDocuments: func.Out[func.Document], to
     rawDocuments.set(func.Document.from_dict({"id":guid, "text": text}))
 
     # Create new topic record in Cosmos DB
-    topics.set(func.Document.from_dict({"id":guid, "state": "pending"}))
+    topics.set(func.Document.from_dict({"id":guid, "state": "pending", "lessonLength": lesson_length}))
 
     # Send message to Service Bus
     message.set(json.dumps({"topic": guid}))

@@ -138,8 +138,12 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
     #     # logging.info(doc.metadata["title"])
     #     logging.info(num_tokens_from_string(doc.page_content, "gpt-3.5-turbo"))
     logging.info("-------- MAP REDUCE OUTPUT ----------")
-    doc_summary = map_reduce_chain.run(split_docs)
-    logging.info(doc_summary)
+    try:
+        doc_summary = map_reduce_chain.run(split_docs)
+        logging.info(doc_summary)
+    except Exception as e:
+        logging.warn(f"error probably Content Filtering: {e}")
+        doc_summary = None
 
     logging.info("-------- GEN TITLE ------------------")
 
@@ -147,10 +151,13 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
         llm=llm,
         prompt=PromptTemplate.from_template(PROMPT_title_template)
     )
-    r = llm_chain(doc_summary)
-    title = r["text"]
-    logging.info(title)
-
+    try:
+        r = llm_chain(doc_summary)
+        title = r["text"]
+        logging.info(title)
+    except Exception as e:  
+        logging.warn(f"error probably Content Filtering: {e}")
+        title = None
 
     return (doc_summary, title, split_docs)
 
@@ -162,12 +169,16 @@ def generate_assesment_from_document(llm:AzureChatOpenAI, chunks:list[Document])
     # random_chunks = random.sample(chunks, 5)
     # for chunk in random_chunks:
         # logging.info(chunk.page_content)
-    r = llm_chain(chunks[0].page_content)
-    logging.info("[{"+r["text"])
-    assessment = json.loads("[{"+r["text"])
-    # logging.info(r["text"])
-    # assessment = r["text"]
-    return assessment
+    try:
+        r = llm_chain(chunks[0].page_content)
+        logging.info("[{"+r["text"])
+        assessment = json.loads("[{"+r["text"])
+        # logging.info(r["text"])
+        # assessment = r["text"]
+        return assessment
+    except Exception as e:
+        logging.warn(f"error probably Content Filtering: {e}")
+        return None
 
 def update_document(id: str, summary:str, title:str, assessment:dict, chunks:list[Document]) -> dict[str, any]:
 
@@ -182,16 +193,20 @@ def update_document(id: str, summary:str, title:str, assessment:dict, chunks:lis
 
 
         read_item = container.read_item(item=id, partition_key=id)
+
         read_item['state'] = "assessing"
-        # read_item['state'] = "ready"
-        read_item['summary'] = summary
-        read_item['title'] = title
-        read_item['assessmentQuestions'] = assessment
-        ch = []
-        for chunk in chunks:
-            guid = str(uuid.uuid4())
-            ch.append({guid:chunk.page_content})
-        read_item['chunks'] = ch
+        if summary is None or title is None or assessment is None or chunks is None:
+            logging.info("-------- DOC UPDATE ERROR ---------- ")
+            read_item['state'] = "failed"
+        else:
+            read_item['summary'] = summary
+            read_item['title'] = title
+            read_item['assessmentQuestions'] = assessment
+            ch = []
+            for chunk in chunks:
+                guid = str(uuid.uuid4())
+                ch.append({guid:chunk.page_content})
+            read_item['chunks'] = ch
         response = container.upsert_item(body=read_item)
     except:
         logging.info("-------- DOC UPDATE ERROR ---------- ")

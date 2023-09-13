@@ -61,93 +61,23 @@ def get_topic(id: str) -> dict:
         logging.info("document not found: "+ id)
         return None
 
-def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
-    # Get Summary as map-reduce patttern from LangChain
-    # Map
-    map_prompt = PromptTemplate.from_template(PROMPT_summarize_map_template)
-    map_chain = LLMChain(llm=llm, prompt=map_prompt)
-
-    # Reduce
-    reduce_prompt = PromptTemplate.from_template(PROMPT_summarize_reduce_template)
-
-
-    # Run chain
-    reduce_chain = LLMChain(llm=llm, prompt=reduce_prompt)
-
-    # Takes a list of documents, combines them into a single string, and passes this to an LLMChain
-    combine_documents_chain = StuffDocumentsChain(
-        llm_chain=reduce_chain, document_variable_name="doc_summaries"
-    )
-
-    # Combines and iteravely reduces the mapped documents
-    reduce_documents_chain = ReduceDocumentsChain(
-        # This is final chain that is called.
-        combine_documents_chain=combine_documents_chain,
-        # If documents exceed context for `StuffDocumentsChain`
-        collapse_documents_chain=combine_documents_chain,
-        # The maximum number of tokens to group documents into.
-        token_max=4000,
-    )
-
-    map_reduce_chain = MapReduceDocumentsChain(
-        # Map chain
-        llm_chain=map_chain,
-        # Reduce chain
-        reduce_documents_chain=reduce_documents_chain,
-        # The variable name in the llm_chain to put the documents in
-        document_variable_name="docs",
-        # Return the results of the map steps in the output
-        return_intermediate_steps=False,
-    )
-
-
-    text_splitter = CharacterTextSplitter.from_tiktoken_encoder(
-        chunk_size=2000, 
-        chunk_overlap=200,
-        separator = "\n",
-    )
-    # logging.info(len(document.page_content))
-    # logging.info(document.page_content)
-    # split_docs = text_splitter.create_documents(document.page_content)
-    split_docs = text_splitter.split_documents([document])
-    # logging.info("-------- SPLITTING OUTPUT ------------------")
-    logging.info(f"INFO: document split in {len(split_docs)} chunks")
-    # for doc in split_docs:
-    #     # for key, value in doc.metadata.items():
-    #     #     print (key)
-    #     logging.info("Chunk:")
-    #     # logging.info(doc.metadata["title"])
-    #     logging.info(num_tokens_from_string(doc.page_content, "gpt-3.5-turbo"))
-    logging.info("-------- MAP REDUCE OUTPUT ----------")
-    doc_summary = map_reduce_chain.run(split_docs)
-    logging.info(doc_summary)
-
-    logging.info("-------- GEN TITLE ------------------")
-
-    llm_chain = LLMChain(
-        llm=llm,
-        prompt=PromptTemplate.from_template(PROMPT_title_template)
-    )
-    r = llm_chain(doc_summary)
-    title = r["text"]
-    logging.info(title)
-
-
-    return (doc_summary, title, split_docs)
-
 def generate_lesson(llm:AzureChatOpenAI, topic:dict) -> str:
     
     llm_chain = LLMChain(
         llm=llm,
         prompt=PromptTemplate.from_template(PROMPT_generate_lesson)
     )
-    for chunk in topic["chunks"]:
-        # logging.info(chunk)
-        # TODO more complex logic, currently only from first chunk
-        for guid,chunk_text in chunk.items():
-            res = llm_chain(chunk_text)
-            logging.info(res["text"])
-            return res["text"]
+    try:
+        for chunk in topic["chunks"]:
+            # logging.info(chunk)
+            # TODO more complex logic, currently only from first chunk
+            for guid,chunk_text in chunk.items():
+                res = llm_chain(chunk_text)
+                # logging.info(res["text"])
+                return res["text"]
+    except Exception as e:
+        logging.warn(f"error probably Content Filtering in Generate Lesson: {e}")
+        return None
     return "n/a"
 
 def generate_test_from_lesson(llm:AzureChatOpenAI, lesson_text:str) -> list[dict]:
@@ -165,9 +95,16 @@ def generate_test_from_lesson(llm:AzureChatOpenAI, lesson_text:str) -> list[dict
     #         # logging.info("[{"+r["text"])
     #         assessment = json.loads("[{"+r["text"])
     #         assessments.extend(assessment)
-    r = llm_chain(lesson_text)
-    assessment = json.loads("[{"+r["text"])
-    return assessment
+    try:
+        # logging.info("-------- LESSON TEXT ---------- ")
+        # logging.info(lesson_text)
+        # logging.info("-------- LESSON TEXT END ---------- ")
+        r = llm_chain(lesson_text)
+        assessment = json.loads("[{"+r["text"])
+        return assessment
+    except Exception as e:
+        logging.warn(f"error probably Content Filtering in Generate Test for Lesson: {e}")
+        return None
 
 def update_document(id: str, lessonText:str, lessonAssessment:dict) -> dict[str, any]:
 
@@ -182,12 +119,15 @@ def update_document(id: str, lessonText:str, lessonAssessment:dict) -> dict[str,
 
 
         read_item = container.read_item(item=id, partition_key=id)
-        # read_item['state'] = "assessing"
         read_item['state'] = "ready"
 
-        # TODO: update lesson text and assessment
-        lessons = [{ "id": str(uuid.uuid4()), "title":"Lesson 1","text": lessonText, "state":"NEW", "lessonQuestions": lessonAssessment }]
-        read_item['lessons'] = lessons
+        if lessonText is None or lessonAssessment is None:
+            read_item['state'] = "failed"   
+        else: 
+            # TODO: update lesson text and assessment
+            lessons = [{ "id": str(uuid.uuid4()), "title":"Lesson 1","text": lessonText, "state":"NEW", "lessonQuestions": lessonAssessment }]
+            read_item['lessons'] = lessons
+
         response = container.upsert_item(body=read_item)
     except:
         logging.info("-------- DOC UPDATE ERROR ---------- ")
@@ -218,14 +158,6 @@ def generatelesson(message: func.ServiceBusMessage):
              status_code=400
         )
 
-    # initialize LLM
-    llm = AzureChatOpenAI(temperature=0, 
-                      model_name="gpt-35-turbo", 
-                      deployment_name="gpt-35-turbo", 
-                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
-                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
-                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
-
     # get document from DB based on GUID
     topic = get_topic(topic_id)
  
@@ -233,31 +165,34 @@ def generatelesson(message: func.ServiceBusMessage):
 
     if topic is None:
         logging.info("Document doesn't exist")
+        # error = True
+        # set document to Failed state
+        update_document(topic_id, None, None)
     else:
         # (doc_summary, title, chunks) = summarize_document(llm, topic)
-        logging.info("-------- TOPIC DETAILS ---------- ")
-        logging.info(topic)
+        # logging.info("-------- TOPIC DETAILS ---------- ")
+        # logging.info(topic)
 
-    llm = AzureChatOpenAI(temperature=0.7, 
-                      model_name="gpt-4", 
-                      deployment_name="gpt-4", 
-                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
-                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
-                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+        llm = AzureChatOpenAI(temperature=0.7, 
+                        model_name="gpt-4", 
+                        deployment_name="gpt-4", 
+                        openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                        openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                        openai_api_version=os.getenv("OPENAI_API_VERSION") )
 
-    logging.info(f"----- GEN LESSON --------")
-    lesson_text = generate_lesson(llm, topic)
+        logging.info(f"----- GEN LESSON --------")
+        lesson_text = generate_lesson(llm, topic)
 
-    llm = AzureChatOpenAI(temperature=0.7, 
-                      model_name="gpt-35-turbo", 
-                      deployment_name="gpt-35-turbo", 
-                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
-                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
-                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+        llm = AzureChatOpenAI(temperature=0.7, 
+                        model_name="gpt-35-turbo", 
+                        deployment_name="gpt-35-turbo", 
+                        openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                        openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                        openai_api_version=os.getenv("OPENAI_API_VERSION") )
 
-    logging.info(f"----- GEN LESSON ASSESSMENT --------")
-    lessson_assessments = generate_test_from_lesson(llm, topic)
+        logging.info(f"----- GEN LESSON ASSESSMENT --------")
+        lessson_assessments = generate_test_from_lesson(llm, lesson_text)
 
-    update_document(topic_id, lesson_text, lessson_assessments)
+        update_document(topic_id, lesson_text, lessson_assessments)
 
     logging.info("--------DONE----------")

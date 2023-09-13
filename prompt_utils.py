@@ -83,3 +83,18 @@ Follow the rules when generating quiz:
 
 Questions:
 [{{"""
+
+PROMPT_generate_lesson = """You are a teacher. Your task is to present complex topics in a simple way. Also you generate study plans and lessons texts for learning of various topics.
+
+Generate lesson content from the TEXT bellow:
+
+TEXT:
+{text}
+
+Follow the rules when generating lesson content:
+- Lesson content chould start with outline which consists of individual topics.
+- Lesson content should contain most important parts of text, historic events, civilisations, geographic etc.
+- Topics should be easy to read.
+- Lesson content should cover and explain the main events.
+
+Lesson content:"""

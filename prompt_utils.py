@@ -21,7 +21,7 @@ PROMPT_title_template = """Generate short title based on the text below. Short t
     Helpful Title:"""
 
 # prompt to generate assesment quiz from give text
-PROMPT_generate_assesment = """Generate a single choice quiz from the text below. 
+PROMPT_generate_assesment_old = """Generate a single choice quiz from the text below. 
 
 Text:
 {text}
@@ -52,3 +52,34 @@ Follow the rules when generating quiz:
 
 Questions:
 """
+
+PROMPT_generate_assesment = """Generate a single choice quiz from the text below. 
+
+{text}
+
+Follow the rules when generating quiz:
+- Quiz should contain 5 questions. 
+- Answers shoud be more than single word.
+- Questions should match high school knowledge level.
+- Questions should spark curiosity.
+- Questions should not cherry-pick detatils.
+- Questions should cover important facts in the test.
+- Questions should cover general knowledge. 
+- Questions **must** be formated as validlist of JSON documents representing each questions.
+- Each question **must** have indicator (true/false) for the correct answer.
+
+==> Example:
+[{{
+            "q_id": 0,
+            "text": "Why did the Maya civilization decline by about 900 CE ?",
+            "answers": [
+                {{ "a_id": 0, "text": "They were invaded by outsiders", "correct": false}},
+                {{ "a_id": 1, "text": "They abandoned their large population centers", "correct": true}},
+                {{ "a_id": 2, "text": "They were hit with a deadly virus", "correct": false}},
+                {{ "a_id": 3, "text": "They lost the ability to grow crops", "correct": false}}
+             ]
+}}]
+<== End of Example
+
+Questions:
+[{{"""

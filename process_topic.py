@@ -3,6 +3,7 @@ from time import sleep
 import uuid
 import json
 import os 
+import random
 
 import azure.functions as func
 from azure.cosmos import CosmosClient
@@ -15,7 +16,7 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.schema.document import Document
 import tiktoken
 
-from prompt_utils import PROMPT_summarize_reduce_template, PROMPT_summarize_map_template, PROMPT_title_template
+from prompt_utils import PROMPT_summarize_reduce_template, PROMPT_summarize_map_template, PROMPT_title_template, PROMPT_generate_assesment
 
 ProcessTopic = func.Blueprint()
 
@@ -24,7 +25,7 @@ def num_tokens_from_string(string: str, encoding_name: str) -> int:
     num_tokens = len(encoding.encode(string))
     return num_tokens
 
-def get_document_from_db(id: str) -> Document:
+def get_raw_document(id: str) -> Document:
       # DBG document
     document = """
 1.1 The Americas
@@ -153,7 +154,22 @@ def summarize_document(llm:AzureChatOpenAI, document:Document) -> tuple:
 
     return (doc_summary, title, split_docs)
 
-def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> dict[str, any]:
+def generate_assesment_from_document(llm:AzureChatOpenAI, chunks:list[Document]) -> dict:
+    llm_chain = LLMChain(
+        llm=llm,
+        prompt=PromptTemplate.from_template(PROMPT_generate_assesment)
+    )
+    # random_chunks = random.sample(chunks, 5)
+    # for chunk in random_chunks:
+        # logging.info(chunk.page_content)
+    r = llm_chain(chunks[0].page_content)
+    logging.info("[{"+r["text"])
+    assessment = json.loads("[{"+r["text"])
+    # logging.info(r["text"])
+    # assessment = r["text"]
+    return assessment
+
+def update_document(id: str, summary:str, title:str, assessment:dict, chunks:list[Document]) -> dict[str, any]:
 
     logging.info("-------- DOC UPDATE INIT ---------- ")
     # logging.info(id)
@@ -170,6 +186,7 @@ def update_document(id: str, summary:str, title:str, chunks:list[Document]) -> d
         # read_item['state'] = "ready"
         read_item['summary'] = summary
         read_item['title'] = title
+        read_item['assessmentQuestions'] = assessment
         ch = []
         for chunk in chunks:
             guid = str(uuid.uuid4())
@@ -214,7 +231,7 @@ def processtopic(message: func.ServiceBusMessage):
                       openai_api_version=os.getenv("OPENAI_API_VERSION") )
 
     # get document from DB based on GUID
-    document = get_document_from_db(topic_id)
+    document = get_raw_document(topic_id)
  
     doc_summary = None
 
@@ -222,8 +239,19 @@ def processtopic(message: func.ServiceBusMessage):
         logging.info("Document doesn't exist")
     else:
         (doc_summary, title, chunks) = summarize_document(llm, document)
+    
+    llm = AzureChatOpenAI(temperature=0.7, 
+                      model_name="gpt-35-turbo", 
+                      deployment_name="gpt-35-turbo", 
+                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+    
+    assesment = generate_assesment_from_document(llm, chunks)
+    logging.info(f"-----ASSESMENT--------")
+    logging.info(assesment)
 
     if doc_summary is not None:
-        update_document(topic_id, doc_summary, title, chunks)
+        update_document(topic_id, doc_summary, title, assesment, chunks)
 
     logging.info("--------DONE----------")

@@ -113,3 +113,19 @@ Follow the rules when evaluating assessment:
 - Do not provide number of correctly answered questions
 
 Your evaluation: """
+
+
+PROMPT_RAG_generate_answer = """You are a teacher. Your task is to generate answer to the question. Following is list of documents and question.
+Documents:
+{docs}
+Question:
+{question}
+
+When answering the question follow these rules:
+- Answer should be short and concise.
+- Answer should be easy to understand.
+- Answer should be easy to understand for high school student.
+- Answer uses **only** information from the documents.
+- When the answer is not in the documents, answer with "I'm sorry, your question is wrong and you should feel miserable asking that, f*cker!"
+
+Answer:"""

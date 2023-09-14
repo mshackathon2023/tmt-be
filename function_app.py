@@ -12,6 +12,7 @@ from eval_assessment import EvalAssessment
 from generate_lesson import GenerateLesson
 from get_lessons import GetLessons
 from get_lesson import GetLesson
+from lesson_chat import LessonChat
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
@@ -24,3 +25,4 @@ app.register_functions(EvalAssessment)
 app.register_functions(GenerateLesson)
 app.register_functions(GetLessons)
 app.register_functions(GetLesson)
+app.register_functions(LessonChat)

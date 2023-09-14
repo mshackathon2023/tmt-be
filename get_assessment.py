@@ -20,44 +20,27 @@ def getassessment(req: func.HttpRequest) -> func.HttpResponse:
     database = client.get_database_client("tmtdb")
     container = database.get_container_client("topics")
 
-    # Retrieve topic from Cosmos DB
+    # Query assessment from Cosmos DB
     try:
-        topic = container.read_item(
-            item=topic_id,
-            partition_key=topic_id
-        )
-    # Handle error of topic not found
-    except cosmos_exceptions.CosmosResourceNotFoundError:
+        items = list(container.query_items(
+            query="SELECT c.assessmentQuestions FROM c WHERE c.id=@id",
+            parameters=[
+                {"name": "@id", "value": topic_id}
+            ],
+            enable_cross_partition_query=True
+        ))
+    except:
         return func.HttpResponse(
-            f"Topic {topic_id} not found in database",
+            f"Error when quering for topic {topic_id}",
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
     
-    # Return error if assessment not available
-    if topic["assessmentQuestions"] == None:
-        return func.HttpResponse(
-            f"Assessment for topic {topic_id} not available",
-            headers = {"Content-Type": "application/json"},
-            status_code=400
-        )
-    
-    # Process assessmentQuestions in topic to return only relevant data (no selected or correct attributes)
-    assessmentQuestions = []
-    for question in topic["assessmentQuestions"]:
-        question_record = {}
-        question_record["q_id"] = question["q_id"]
-        question_record["text"] = question["text"]
-        question_record["answers"] = []
-        for answer in question["answers"]:
-            answer_record = {}
-            answer_record["a_id"] = answer["a_id"]
-            answer_record["text"] = answer["text"]
-            question_record["answers"].append(answer_record)
-        assessmentQuestions.append(question_record)
+    # Prepare output
+    output = items[0]["assessmentQuestions"]
 
     return func.HttpResponse(
-        json.dumps(assessmentQuestions),
+        json.dumps(output),
         headers = {"Content-Type": "application/json"},
         status_code=200
     )

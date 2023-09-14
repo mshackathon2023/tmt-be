@@ -20,22 +20,27 @@ def gettopic(req: func.HttpRequest) -> func.HttpResponse:
     database = client.get_database_client("tmtdb")
     container = database.get_container_client("topics")
 
-    # Retrieve topic from Cosmos DB
+    # Query topics from Cosmos DB
     try:
-        topic = container.read_item(
-            item=topic_id,
-            partition_key=topic_id
-        )
-    # Handle error of topic not found
-    except cosmos_exceptions.CosmosResourceNotFoundError:
+        items = list(container.query_items(
+            query="SELECT c.id, c.state, c.summary, c.title FROM c WHERE c.id=@id",
+            parameters=[
+                {"name": "@id", "value": topic_id}
+            ],
+            enable_cross_partition_query=False
+        ))
+    except:
         return func.HttpResponse(
-            f"Topic {topic_id} not found in database",
+            f"Error when quering for topic {topic_id}",
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
+    
+    # Prepare output
+    output = items[0]
 
     return func.HttpResponse(
-        json.dumps(topic),
+        json.dumps(output),
         headers = {"Content-Type": "application/json"},
         status_code=200
     )

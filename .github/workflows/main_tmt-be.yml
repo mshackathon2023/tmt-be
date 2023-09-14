@@ -65,6 +65,6 @@ jobs:
           app-name: 'tmt-be'
           slot-name: 'Production'
           package: ${{ env.AZURE_FUNCTIONAPP_PACKAGE_PATH }}
-          publish-profile: ${{ secrets.AZUREAPPSERVICE_PUBLISHPROFILE_C4A65D13BAC74A57B45D7B582D87C8F0 }}
+          publish-profile: ${{ secrets.APPSERVICE_PUBLISH_PROFILE }}
           scm-do-build-during-deployment: false
           enable-oryx-build: false

@@ -171,7 +171,7 @@ def generate_assesment_from_document(llm:AzureChatOpenAI, chunks:list[Document])
         # logging.info(chunk.page_content)
     try:
         r = llm_chain(chunks[0].page_content)
-        logging.info("[{"+r["text"])
+        # logging.info("[{"+r["text"])
         assessment = json.loads("[{"+r["text"])
         # logging.info(r["text"])
         # assessment = r["text"]
@@ -196,7 +196,7 @@ def update_document(id: str, summary:str, title:str, assessment:dict, chunks:lis
 
         read_item['state'] = "assessing"
         if summary is None or title is None or assessment is None or chunks is None:
-            logging.info("-------- DOC UPDATE ERROR ---------- ")
+            logging.info("-------- STATE = FAILED ---------- ")
             read_item['state'] = "failed"
         else:
             read_item['summary'] = summary
@@ -223,6 +223,8 @@ def update_document(id: str, summary:str, title:str, assessment:dict, chunks:lis
 def processtopic(message: func.ServiceBusMessage):
     logging.info("-------- ServiceBus trigger function starterd --------")
     logging.getLogger("azure").setLevel(logging.ERROR)
+    # set flush to true to prevent log buffering
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s', flush=True)
     topic_id = None
     try:
         message_body = message.get_body().decode("utf-8")
@@ -262,11 +264,14 @@ def processtopic(message: func.ServiceBusMessage):
                       openai_api_key=os.getenv("OPENAI_API_KEY"), 
                       openai_api_version=os.getenv("OPENAI_API_VERSION") )
     
-    assesment = generate_assesment_from_document(llm, chunks)
     logging.info(f"-----ASSESMENT--------")
-    logging.info(assesment)
+    assesment = generate_assesment_from_document(llm, chunks)
+    # logging.info(assesment)
 
-    if doc_summary is not None:
-        update_document(topic_id, doc_summary, title, assesment, chunks)
+    logging.info(f"-----UPDATE DOCUMENT--------")
+    logging.info(f"chechinng whether some input is None (if None then True)")
+    logging.info(f"summary: {doc_summary is None} title: {title is None} assesment: {assesment is None} chunks: {chunks is None}")
+
+    update_document(topic_id, doc_summary, title, assesment, chunks)
 
     logging.info("--------DONE----------")

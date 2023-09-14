@@ -51,9 +51,9 @@ def query_knowledgebase(query:str, chunks: list) -> list[Document]:
     # find similar documents
     docs = db.similarity_search(query)
 
-    # logging.info(f"query: {query}")
-    # for doc in docs:
-    #     logging.info(f"similar document: {doc.page_content}")
+    logging.info(f"query: {query}")
+    for doc in docs:
+        logging.info(f'similar document ({doc.metadata["id"]}): {doc.page_content}')
 
     return docs
 
@@ -62,6 +62,8 @@ def generate_answer_from_docs(query:str, docs: list[Document]) -> str:
         return "I'm sorry, I don't know the answer to that."
     
     logging.info("-------- GENERATE ANSWER ------------------")
+    logging.info(f"query: {query}")
+    logging.info(f"docs count: {len(docs)}")
 
     llm = AzureChatOpenAI(temperature=0.7, 
                       model_name="gpt-35-turbo", 
@@ -139,9 +141,9 @@ def lessonchat(req: func.HttpRequest) -> func.HttpResponse:
     logging.info("-------- EXTRACTED Question ------------------")
     logging.info(f"question: {question}")
     
-    docs_matching_query = query_knowledgebase("Who is father of king Charles II?", chunks)
+    docs_matching_query = query_knowledgebase(question, chunks)
 
-    answer = generate_answer_from_docs("Who is president of Malaysia?",docs_matching_query)
+    answer = generate_answer_from_docs(question,docs_matching_query)
 
     # Prepare messages - MOCK ONLY
     # messages.append({"role":"assistant", "content": generate_random_sentence()})

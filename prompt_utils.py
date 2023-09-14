@@ -114,6 +114,25 @@ Follow the rules when evaluating assessment:
 
 Your evaluation: """
 
+PROMPT_generate_eval_areas = """You are a teacher. Your task is to evaluate the assessment quiz in three key topics that test was focusing on. For each of three topics you identify provide user score based on correctness of his answers on scale 0 to 100. Following is list of questions and information whether user answered correctly or not. 
+
+User answers:
+{text}
+
+Follow the rules when evaluating assessment:
+- Output will be in JSON in schema described bellow. Do not output anything else than correct JSON.
+- name field in JSON should represent name of identified area in one or two words
+- score field in JSON should be numeric evaluation between 0 and 100 based on correctness of user answers to questions
+- Do not provide more than three topics
+- Name of each topic should not be more than two words
+
+JSON output structure should look like this:
+[{{"name": "topic1", "score": 95}}, {{"name": "topic2", "score": 73}}, {{"topic3": "area3", "score": 42}}]
+
+Stop immediately on ] character
+
+Your evaluation: 
+[{{"name":"""
 
 PROMPT_RAG_generate_answer = """You are a teacher. Your task is to generate answer to the question. Following is list of documents and question.
 Documents:

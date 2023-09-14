@@ -7,13 +7,57 @@ from azure.cosmos import CosmosClient, PartitionKey
 import azure.cosmos.exceptions as cosmos_exceptions
 import os
 
+from langchain.chat_models import AzureChatOpenAI
+from langchain import LLMChain, PromptTemplate
+from langchain.text_splitter import CharacterTextSplitter
+from langchain.chains import ReduceDocumentsChain, MapReduceDocumentsChain
+from langchain.chains.combine_documents.stuff import StuffDocumentsChain
+from langchain.schema.document import Document
+import tiktoken
+
+from prompt_utils import PROMPT_generate_eval_text
+
 EvalAssessment = func.Blueprint()
+
+def generate_eval_text(answers) -> str:
+    text = ""
+    for answer in answers:
+        if answer["correct"]:
+            text += f"CORRECT: {answer['text']}\n"
+        else:
+            text += f"INCORRECT: {answer['text']}\n"
+
+    llm = AzureChatOpenAI(temperature=0.7, 
+                      model_name="gpt-35-turbo", 
+                      deployment_name="gpt-35-turbo", 
+                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+    
+    logging.info("-------- GEN EVAL TEXT ------------------")
+
+    llm_chain = LLMChain(
+        llm=llm,
+        prompt=PromptTemplate.from_template(PROMPT_generate_eval_text)
+    )
+    try:
+        r = llm_chain(answers)
+        eval_text = r["text"]
+        logging.info(eval_text)
+    except Exception as e:  
+        logging.warn(f"error probably Content Filtering: {e}")
+        eval_text = None
+        
+    return eval_text
+
 
 @EvalAssessment.route(route="evalassessment/{topic}", methods=["POST"])
 @EvalAssessment.service_bus_topic_output(arg_name="message",
                               connection="SERVICEBUS_CONNECTION_STRING",
                               topic_name="assessedtopic")
 def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpResponse:
+
+    logging.getLogger("azure").setLevel(logging.ERROR)
 
     # Get topic ID from route parameter
     topic_id = req.route_params.get("topic")
@@ -50,6 +94,7 @@ def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRe
         assessment_eval = req.get_json()
         jsonschema.validate(assessment_eval, schema)
     except:
+        logging.error("JSON body with assessment could not be parsed")
         return func.HttpResponse(
             "JSON body with assessment could not be parsed",
             status_code=400
@@ -111,13 +156,29 @@ def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRe
     topic["state"] = "assessed"
 
     # Replace topic in Cosmos DB
-    container.replace_item(topic_id, topic)
+    # container.replace_item(topic_id, topic)
 
     # Send message to Service Bus
-    message.set(json.dumps({"topic": topic_id}))
+    # message.set(json.dumps({"topic": topic_id}))
+
+    # Calculate total score
+    correct_answers = 0
+    incorrect_answers = 0
+    for question in assessmentQuestions_edited:
+        if question["correct"]:
+            correct_answers += 1
+        else:
+            incorrect_answers += 1
+    total_score = 100 * correct_answers / (correct_answers + incorrect_answers)
+
+    # Prepare output
+    output = {}
+    output["totalScore"] = total_score
+    output["evaluation"] = generate_eval_text(assessmentQuestions_edited)
+    output["areas"] = [{"name": "Regan Administration", "score": 90}, {"name": "US presidents", "score": 30}, {"name": "Finance", "score": 65}]
 
     return func.HttpResponse(
-        "{}",
+        json.dumps(output),
         headers = {"Content-Type": "application/json"},
         status_code=200
     )

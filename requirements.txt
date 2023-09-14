@@ -8,3 +8,5 @@ openai
 tiktoken 
 langchain
 jsonschema
+faiss-cpu
+faker

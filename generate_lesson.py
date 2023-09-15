@@ -61,24 +61,36 @@ def get_topic(id: str) -> dict:
         logging.info("document not found: "+ id)
         return None
 
-def generate_lesson(llm:AzureChatOpenAI, topic:dict) -> str:
+def generate_lesson(llm:AzureChatOpenAI, topic:dict) -> list[str]:
     
+    # llm_chain_outline = LLMChain(
+    #     llm=llm,
+    #     prompt=PromptTemplate.from_template(PROMPT_generate_lesson_outline)
+    # )
     llm_chain = LLMChain(
         llm=llm,
         prompt=PromptTemplate.from_template(PROMPT_generate_lesson)
     )
     try:
+        # res = llm_chain_outline(topic["summary"])
+        # outline = res["text"]
+        lessons = []
         for chunk in topic["chunks"]:
             # logging.info(chunk)
             # TODO more complex logic, currently only from first chunk
             for guid,chunk_text in chunk.items():
                 res = llm_chain(chunk_text)
                 # logging.info(res["text"])
-                return res["text"]
+                # return res["text"]
+                lessons.append(res["text"])
+                # TODO potentially generate more than one lesson, now emiting first lesson only
+                return lessons
+        # return lessons
     except Exception as e:
         logging.warn(f"error probably Content Filtering in Generate Lesson: {e}")
         return None
-    return "n/a"
+    # return "n/a"
+    return lessons
 
 def generate_test_from_lesson(llm:AzureChatOpenAI, lesson_text:str) -> list[dict]:
     llm_chain = LLMChain(
@@ -106,7 +118,7 @@ def generate_test_from_lesson(llm:AzureChatOpenAI, lesson_text:str) -> list[dict
         logging.warn(f"error probably Content Filtering in Generate Test for Lesson: {e}")
         return None
 
-def update_document(id: str, lessonText:str, lessonAssessment:dict) -> dict[str, any]:
+def update_document(id: str, lessonText:list[str], lessonAssessment:dict) -> dict[str, any]:
 
     logging.info("-------- DOC UPDATE INIT ---------- ")
     # logging.info(id)
@@ -124,8 +136,13 @@ def update_document(id: str, lessonText:str, lessonAssessment:dict) -> dict[str,
         if lessonText is None or lessonAssessment is None:
             read_item['state'] = "failed"   
         else: 
-            # TODO: update lesson text and assessment
-            lessons = [{ "id": str(uuid.uuid4()), "title":"Lesson 1","text": lessonText, "state":"NEW", "lessonQuestions": lessonAssessment }]
+            lessons = []
+            i = 0
+            for lesson in lessonText:
+                lessons.append({ "id": str(uuid.uuid4()), "title":f"Lesson {i}","text": lesson, "state":"NEW", "lessonQuestions": lessonAssessment })
+                i += 1
+            # lessons = [{ "id": str(uuid.uuid4()), "title":"Lesson 1","text": lessonText, "state":"NEW", "lessonQuestions": lessonAssessment }]
+
             read_item['lessons'] = lessons
 
         response = container.upsert_item(body=read_item)
@@ -176,6 +193,7 @@ def generatelesson(message: func.ServiceBusMessage):
         llm = AzureChatOpenAI(temperature=0.7, 
                         model_name="gpt-4", 
                         deployment_name="gpt-4", 
+                        max_tokens=4000,
                         openai_api_base=os.getenv("OPENAI_API_BASE"), 
                         openai_api_key=os.getenv("OPENAI_API_KEY"), 
                         openai_api_version=os.getenv("OPENAI_API_VERSION") )

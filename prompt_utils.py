@@ -84,7 +84,7 @@ Follow the rules when generating quiz:
 Questions:
 [{{"""
 
-PROMPT_generate_lesson = """You are a teacher. Your task is to present complex topics in a simple way. Also you generate study plans and lessons texts for learning of various topics.
+PROMPT_generate_lesson = """You are a teacher. Your task is to present complex topics in a simple way. Also you generate lessons texts for learning of various topics.
 
 Generate lesson content from the TEXT bellow:
 
@@ -93,9 +93,13 @@ TEXT:
 
 Follow the rules when generating lesson content:
 - Lesson content chould start with outline which consists of individual topics.
-- Lesson content should contain most important parts of text, historic events, civilisations, geographic etc.
+- Lesson content then covers all topics from outline.
+- Each topic should be in five paragraphs and gives conscise learning text.
 - Topics should be easy to read.
 - Lesson content should cover and explain the main events.
+- Lesson content should be easy to understand.
+- Lesson content should contain most important parts of text, historic events, civilisations, geographic etc.
+- Please format output in Markdown to higlight headings, lists, stressed facts.
 
 Lesson content:"""
 

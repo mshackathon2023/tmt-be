@@ -72,17 +72,18 @@ def generate_eval_areas(answers) -> str:
         prompt=PromptTemplate.from_template(PROMPT_generate_eval_areas)
     )
 
-    eval_text = '[{"name":'
+    eval_areas = '[{"name":'
 
     try:
         r = llm_chain(answers)
-        eval_text = eval_text + r["text"]
-        logging.info(eval_text)
+        eval_areas = eval_areas + r["text"]
+        eval_areas = json.loads(eval_areas)
+        logging.info(eval_areas)
     except Exception as e:  
-        logging.warn(f"error probably Content Filtering: {e}")
-        eval_text = "Not available due to content filtering"
-        
-    return eval_text
+        logging.warn(f"error probably Content Filtering or JSON parsing: {e}")
+        eval_areas = []
+
+    return eval_areas
 
 
 @EvalAssessment.route(route="evalassessment/{topic}", methods=["POST"])
@@ -210,6 +211,8 @@ def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRe
     output["totalScore"] = total_score
     output["evaluation"] = generate_eval_text(assessmentQuestions_edited)
     output["areas"] = generate_eval_areas(assessmentQuestions_edited)
+    
+    logging.info(f"FINAL RESPONSE:\n{output}")
 
     return func.HttpResponse(
         json.dumps(output),

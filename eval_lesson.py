@@ -15,7 +15,7 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.schema.document import Document
 import tiktoken
 
-from prompt_utils import PROMPT_generate_eval_text
+from prompt_utils import PROMPT_generate_eval_text, PROMPT_generate_eval_areas
 
 EvalLesson = func.Blueprint()
 
@@ -46,16 +46,48 @@ def generate_eval_text(answers) -> str:
         logging.info(eval_text)
     except Exception as e:  
         logging.warn(f"error probably Content Filtering: {e}")
-        eval_text = None
+        eval_text = "Not available due to content filtering"
         
     return eval_text
 
+def generate_eval_areas(answers) -> str:
+    text = ""
+    for answer in answers:
+        if answer["correct"]:
+            text += f"CORRECT: {answer['text']}\n"
+        else:
+            text += f"INCORRECT: {answer['text']}\n"
+
+    llm = AzureChatOpenAI(temperature=0.7, 
+                      model_name="gpt-35-turbo", 
+                      deployment_name="gpt-35-turbo", 
+                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
+                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
+                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
+    
+    logging.info("-------- GEN AREAS ------------------")
+
+    llm_chain = LLMChain(
+        llm=llm,
+        prompt=PromptTemplate.from_template(PROMPT_generate_eval_areas)
+    )
+
+    eval_areas = '[{"name":'
+
+    try:
+        r = llm_chain(answers)
+        eval_areas = eval_areas + r["text"]
+        eval_areas = json.loads(eval_areas)
+        logging.info(eval_areas)
+    except Exception as e:  
+        logging.warn(f"error probably Content Filtering or JSON parsing: {e}")
+        eval_areas = []
+
+    return eval_areas
+
 
 @EvalLesson.route(route="evallesson/{topic}/{lesson}", methods=["POST"])
-# @EvalLesson.service_bus_topic_output(arg_name="message",
-#                               connection="SERVICEBUS_CONNECTION_STRING",
-#                               topic_name="assessedtopic")
-def evallesson(req: func.HttpRequest, message: func.Out[str]) -> func.HttpResponse:
+def evallesson(req: func.HttpRequest) -> func.HttpResponse:
 
     logging.getLogger("azure").setLevel(logging.ERROR)
 
@@ -109,31 +141,38 @@ def evallesson(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRespon
     database = client.get_database_client("tmtdb")
     container = database.get_container_client("topics")
 
-    # Retrieve topic from Cosmos DB
+    # Query lessons from Cosmos DB
     try:
-        topic = container.read_item(
-            item=topic_id,
-            partition_key=topic_id
-        )
-    # Handle error of topic not found
-    except cosmos_exceptions.CosmosResourceNotFoundError:
+        items = list(container.query_items(
+            query="SELECT c.lessons FROM c JOIN l in c.lessons WHERE c.id=@topic_id and l.id=@lesson_id",
+            parameters=[
+                {"name": "@topic_id", "value": topic_id},
+                {"name": "@lesson_id", "value": lesson_id}
+            ],
+            enable_cross_partition_query=False
+        ))
+    except:
         return func.HttpResponse(
-            f"Topic {topic_id} not found in database",
+            f"Error when quering for topic {topic_id}",
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
+
+    # Prepare output
+    logging.info(f"ORIGINAL RESPONSE:\n{items[0]}['lessons'][0]")
+    lessonQuestions = items[0]["lessons"][0]["lessonQuestions"]
     
     # Return error if assessment not available
-    if topic["assessmentQuestions"] == None:
+    if lessonQuestions== None:
         return func.HttpResponse(
-            f"Assessment for topic {topic_id} not available",
+            f"Lessons for topic {topic_id} lesson {lesson_id} not available",
             headers = {"Content-Type": "application/json"},
             status_code=400
         )
     
     # Evaluate stored assessment against submitted assessment
     assessmentQuestions_edited = []
-    for question in topic["assessmentQuestions"]:
+    for question in lessonQuestions:
         correct = False
 
         # Lookup question in submitted assessment
@@ -155,9 +194,9 @@ def evallesson(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRespon
         # Add question to list of questions
         assessmentQuestions_edited.append(question)
  
-    # Replace original assessmentQuestions with edited version
-    topic["assessmentQuestions"] = assessmentQuestions_edited
-    topic["state"] = "assessed"
+    # # Replace original assessmentQuestions with edited version
+    # topic["assessmentQuestions"] = assessmentQuestions_edited
+    # topic["state"] = "assessed"
 
     # # Replace topic in Cosmos DB
     # container.replace_item(topic_id, topic)
@@ -179,7 +218,9 @@ def evallesson(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRespon
     output = {}
     output["totalScore"] = total_score
     output["evaluation"] = generate_eval_text(assessmentQuestions_edited)
-    output["areas"] = [{"name": "Regan Administration", "score": 90}, {"name": "US presidents", "score": 30}, {"name": "Finance", "score": 65}]
+    output["areas"] = generate_eval_areas(assessmentQuestions_edited)
+    
+    logging.info(f"FINAL RESPONSE:\n{output}")
 
     return func.HttpResponse(
         json.dumps(output),

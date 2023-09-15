@@ -15,9 +15,9 @@ from langchain.chains.combine_documents.stuff import StuffDocumentsChain
 from langchain.schema.document import Document
 import tiktoken
 
-from prompt_utils import PROMPT_generate_eval_text, PROMPT_generate_eval_areas
+from prompt_utils import PROMPT_generate_eval_text
 
-EvalAssessment = func.Blueprint()
+EvalLesson = func.Blueprint()
 
 def generate_eval_text(answers) -> str:
     text = ""
@@ -46,56 +46,26 @@ def generate_eval_text(answers) -> str:
         logging.info(eval_text)
     except Exception as e:  
         logging.warn(f"error probably Content Filtering: {e}")
-        eval_text = "Not available due to content filtering"
-        
-    return eval_text
-
-def generate_eval_areas(answers) -> str:
-    text = ""
-    for answer in answers:
-        if answer["correct"]:
-            text += f"CORRECT: {answer['text']}\n"
-        else:
-            text += f"INCORRECT: {answer['text']}\n"
-
-    llm = AzureChatOpenAI(temperature=0.7, 
-                      model_name="gpt-35-turbo", 
-                      deployment_name="gpt-35-turbo", 
-                      openai_api_base=os.getenv("OPENAI_API_BASE"), 
-                      openai_api_key=os.getenv("OPENAI_API_KEY"), 
-                      openai_api_version=os.getenv("OPENAI_API_VERSION") )
-    
-    logging.info("-------- GEN AREAS ------------------")
-
-    llm_chain = LLMChain(
-        llm=llm,
-        prompt=PromptTemplate.from_template(PROMPT_generate_eval_areas)
-    )
-
-    eval_text = '[{"name":'
-
-    try:
-        r = llm_chain(answers)
-        eval_text = eval_text + r["text"]
-        logging.info(eval_text)
-    except Exception as e:  
-        logging.warn(f"error probably Content Filtering: {e}")
-        eval_text = "Not available due to content filtering"
+        eval_text = None
         
     return eval_text
 
 
-@EvalAssessment.route(route="evalassessment/{topic}", methods=["POST"])
-@EvalAssessment.service_bus_topic_output(arg_name="message",
-                              connection="SERVICEBUS_CONNECTION_STRING",
-                              topic_name="assessedtopic")
-def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpResponse:
+@EvalLesson.route(route="evallesson/{topic}/{lesson}", methods=["POST"])
+# @EvalLesson.service_bus_topic_output(arg_name="message",
+#                               connection="SERVICEBUS_CONNECTION_STRING",
+#                               topic_name="assessedtopic")
+def evallesson(req: func.HttpRequest, message: func.Out[str]) -> func.HttpResponse:
 
     logging.getLogger("azure").setLevel(logging.ERROR)
 
     # Get topic ID from route parameter
     topic_id = req.route_params.get("topic")
     logging.info(f"Getting topic {topic_id}")
+
+    # Get lesson ID from route parameter
+    lesson_id = req.route_params.get("lesson")
+    logging.info(f"Getting lesson {lesson_id}")
 
     # Define the JSON schema
     schema = {
@@ -189,11 +159,11 @@ def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRe
     topic["assessmentQuestions"] = assessmentQuestions_edited
     topic["state"] = "assessed"
 
-    # Replace topic in Cosmos DB
-    container.replace_item(topic_id, topic)
+    # # Replace topic in Cosmos DB
+    # container.replace_item(topic_id, topic)
 
-    # Send message to Service Bus
-    message.set(json.dumps({"topic": topic_id}))
+    # # Send message to Service Bus
+    # message.set(json.dumps({"topic": topic_id}))
 
     # Calculate total score
     correct_answers = 0
@@ -209,7 +179,7 @@ def evalassessment(req: func.HttpRequest, message: func.Out[str]) -> func.HttpRe
     output = {}
     output["totalScore"] = total_score
     output["evaluation"] = generate_eval_text(assessmentQuestions_edited)
-    output["areas"] = generate_eval_areas(assessmentQuestions_edited)
+    output["areas"] = [{"name": "Regan Administration", "score": 90}, {"name": "US presidents", "score": 30}, {"name": "Finance", "score": 65}]
 
     return func.HttpResponse(
         json.dumps(output),
